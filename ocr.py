@@ -5,7 +5,6 @@ import cv2
 import io
 from pdf2image import convert_from_bytes
 import pytesseract
-import easyocr
 
 st.set_page_config(page_title="OCR HR/EN", page_icon="🔎")
 st.title("🔎 OCR (Croatian + English)")
@@ -37,11 +36,14 @@ def ocr_tesseract(pil_img, lang_codes="hrv+eng", psm=6):
 
 @st.cache_resource
 def get_easyocr_reader(langs_tuple):
+    # Import easyocr lazily so model download only happens when user requests it
+    import easyocr
     return easyocr.Reader(list(langs_tuple), gpu=False)
 
 
 def ocr_easyocr(pil_img, langs=("hr", "en")):
-    reader = get_easyocr_reader(tuple(langs))
+    with st.spinner("Loading EasyOCR model (first run may take a minute)..."):
+        reader = get_easyocr_reader(tuple(langs))
     lines = reader.readtext(np.array(pil_img), detail=0, paragraph=True)
     return "\n".join(lines)
 
@@ -90,7 +92,7 @@ with st.expander("Pre-processing options"):
         "Tesseract PSM (page layout mode)",
         [3, 4, 6, 11, 12],
         index=2,
-        help="6 = assume uniform block of text (default). 3 = auto. 11 = sparse text."
+        help="6 = uniform text block (default). 3 = auto. 11 = sparse text."
     )
 
 if uploaded_file:
@@ -101,7 +103,6 @@ if uploaded_file:
     if ext == "pdf":
         try:
             pdf_bytes = uploaded_file.read()
-            # All pages converted at 300 DPI for good quality
             pages = convert_from_bytes(pdf_bytes, dpi=300)
             images = [p.convert("RGB") for p in pages]
         except Exception as e:
@@ -109,7 +110,6 @@ if uploaded_file:
             st.stop()
     else:
         img = Image.open(uploaded_file)
-        # Handle transparent PNGs
         if img.mode in ("RGBA", "LA"):
             bg = Image.new("RGB", img.size, (255, 255, 255))
             bg.paste(img, mask=img.split()[-1])
@@ -124,10 +124,10 @@ if uploaded_file:
 
     for idx, img in enumerate(images, start=1):
         st.markdown(f"### Page {idx} of {len(images)}")
-        st.image(img, use_container_width=True)
+        st.image(img, width='stretch')
 
         pre = preprocess_for_ocr(img, upscale=upscale, do_threshold=do_threshold)
-        st.image(pre, caption="Pre-processed for OCR", use_container_width=True)
+        st.image(pre, caption="Pre-processed for OCR", width='stretch')
 
         with st.spinner(f"Running OCR on page {idx}..."):
             text = run_ocr(pre, engine, lang_hr, lang_en, psm)
@@ -135,7 +135,6 @@ if uploaded_file:
         extracted_all.append(text)
         st.text_area(f"Extracted text - Page {idx}", value=text, height=220)
 
-    # --- Download full output ---
     final_text = "\n\n".join(
         [f"===== PAGE {i} =====\n{t}" for i, t in enumerate(extracted_all, start=1)]
     )
