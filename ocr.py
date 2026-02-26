@@ -36,7 +36,6 @@ def ocr_tesseract(pil_img, lang_codes="hrv+eng", psm=6):
 
 @st.cache_resource
 def get_easyocr_reader(langs_tuple):
-    # Import easyocr lazily so model download only happens when user requests it
     import easyocr
     return easyocr.Reader(list(langs_tuple), gpu=False)
 
@@ -98,8 +97,8 @@ with st.expander("Pre-processing options"):
 if uploaded_file:
     name = uploaded_file.name.lower()
     ext = name.split(".")[-1]
-
     images = []
+
     if ext == "pdf":
         try:
             pdf_bytes = uploaded_file.read()
@@ -119,26 +118,21 @@ if uploaded_file:
         images = [img]
 
     st.info(f"Pages / images loaded: {len(images)}")
-
     extracted_all = []
 
     for idx, img in enumerate(images, start=1):
         st.markdown(f"### Page {idx} of {len(images)}")
-        st.image(img, width='stretch')
-
+        st.image(img, use_container_width=True)
         pre = preprocess_for_ocr(img, upscale=upscale, do_threshold=do_threshold)
-        st.image(pre, caption="Pre-processed for OCR", width='stretch')
-
+        st.image(pre, caption="Pre-processed for OCR", use_container_width=True)
         with st.spinner(f"Running OCR on page {idx}..."):
             text = run_ocr(pre, engine, lang_hr, lang_en, psm)
-
         extracted_all.append(text)
         st.text_area(f"Extracted text - Page {idx}", value=text, height=220)
 
     final_text = "\n\n".join(
         [f"===== PAGE {i} =====\n{t}" for i, t in enumerate(extracted_all, start=1)]
     )
-
     st.download_button(
         label="Download all text (.txt)",
         data=final_text.encode("utf-8"),
